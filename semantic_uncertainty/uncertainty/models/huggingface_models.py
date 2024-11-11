@@ -23,6 +23,7 @@ from uncertainty.models.base_model import STOP_SEQUENCES
 
 class StoppingCriteriaSub(StoppingCriteria):
     """Stop generations when they match a particular text or token."""
+
     def __init__(self, stops, tokenizer, match_on='text', initial_length=None):
         super().__init__()
         self.stops = stops
@@ -30,14 +31,16 @@ class StoppingCriteriaSub(StoppingCriteria):
         self.tokenizer = tokenizer
         self.match_on = match_on
         if self.match_on == 'tokens':
-            self.stops = [torch.tensor(self.tokenizer.encode(i)).to('cuda') for i in self.stops]
+            self.stops = [torch.tensor(self.tokenizer.encode(i)).to(
+                'cuda') for i in self.stops]
             print(self.stops)
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor):
         del scores
         for stop in self.stops:
             if self.match_on == 'text':
-                generation = self.tokenizer.decode(input_ids[0][self.initial_length:], skip_special_tokens=False)
+                generation = self.tokenizer.decode(
+                    input_ids[0][self.initial_length:], skip_special_tokens=False)
                 match = stop in generation
             elif self.match_on == 'tokens':
                 # Can be dangerous due to tokenizer ambiguities.
@@ -113,7 +116,7 @@ class HuggingfaceModel(BaseModel):
                 base = 'huggyllama'
 
             self.tokenizer = AutoTokenizer.from_pretrained(
-                f"{base}/{model_name}", device_map="auto",
+                f"{model_name}", device_map="auto",
                 token_type_ids=None)
 
             llama65b = '65b' in model_name.lower() and base == 'huggyllama'
@@ -121,8 +124,7 @@ class HuggingfaceModel(BaseModel):
 
             if ('7b' in model_name or '13b' in model_name) or eightbit:
                 self.model = AutoModelForCausalLM.from_pretrained(
-                    f"{base}/{model_name}", device_map="auto",
-                    max_memory={0: '80GIB'}, **kwargs,)
+                    f"{model_name}", torch_dtype=torch.float16, device_map="auto", **kwargs,)
 
             elif llama2or3_70b or llama65b:
                 path = snapshot_download(
@@ -138,14 +140,15 @@ class HuggingfaceModel(BaseModel):
                     max_mem = 17.5 * 4686198491
                 else:
                     max_mem = 15 * 4686198491
-                
+
                 device_map = accelerate.infer_auto_device_map(
                     self.model.model,
                     max_memory={0: max_mem, 1: max_mem},
                     dtype='float16'
                 )
                 device_map = remove_split_layer(device_map)
-                full_model_device_map = {f"model.{k}": v for k, v in device_map.items()}
+                full_model_device_map = {
+                    f"model.{k}": v for k, v in device_map.items()}
                 full_model_device_map["lm_head"] = 0
 
                 self.model = accelerate.load_checkpoint_and_dispatch(
@@ -196,7 +199,8 @@ class HuggingfaceModel(BaseModel):
                 **kwargs,
             )
         elif 'phi' in model_name.lower():
-            model_id = f'microsoft/{model_name}'  # e.g. Phi-3-mini-128k-instruct
+            # e.g. Phi-3-mini-128k-instruct
+            model_id = f'microsoft/{model_name}'
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_id, device_map='auto', token_type_ids=None,
                 clean_up_tokenization_spaces=False)
@@ -223,7 +227,6 @@ class HuggingfaceModel(BaseModel):
         self.stop_sequences = stop_sequences + [self.tokenizer.eos_token]
         self.token_limit = 4096 if 'Llama-2' in model_name else 2048
 
-    
     def predict(self, input_data, temperature, return_full=False, return_latent=False):
 
         if isinstance(input_data, tuple):
@@ -298,12 +301,14 @@ class HuggingfaceModel(BaseModel):
 
         # Remove whitespaces from answer (in particular from beginning.)
         sliced_answer = sliced_answer.strip()
-        token_stop_index = self.tokenizer(full_answer[:input_data_offset + stop_at], return_tensors="pt")['input_ids'].shape[1]
+        token_stop_index = self.tokenizer(
+            full_answer[:input_data_offset + stop_at], return_tensors="pt")['input_ids'].shape[1]
         n_input_token = len(inputs['input_ids'][0])
         n_generated = token_stop_index - n_input_token
 
         if n_generated == 0:
-            logging.warning('Only stop_words were generated. For likelihoods and embeddings, taking stop word instead.')
+            logging.warning(
+                'Only stop_words were generated. For likelihoods and embeddings, taking stop word instead.')
             n_generated = 1
 
         if 'decoder_hidden_states' in outputs.keys():
@@ -319,7 +324,7 @@ class HuggingfaceModel(BaseModel):
                 n_generated, n_input_token, token_stop_index,
                 self.tokenizer.decode(outputs['sequences'][0][-1]),
                 full_answer,
-                )
+            )
             last_input = hidden[0]
         elif ((n_generated - 1) >= len(hidden)):
             # if access idx is larger/equal
@@ -330,7 +335,7 @@ class HuggingfaceModel(BaseModel):
                 n_generated, n_input_token, token_stop_index,
                 self.tokenizer.decode(outputs['sequences'][0][-1]),
                 full_answer, sliced_answer
-                )
+            )
             last_input = hidden[-1]
         else:
             last_input = hidden[n_generated - 1]
@@ -341,25 +346,28 @@ class HuggingfaceModel(BaseModel):
         last_token_embedding = last_layer[:, -1, :].cpu()
 
         if return_latent:
-            # Stack second last token embeddings from all layers 
+            # Stack second last token embeddings from all layers
             if len(hidden) == 1:  # FIX: runtime error for mistral-7b on bioasq
                 sec_last_input = hidden[0]
             elif ((n_generated - 2) >= len(hidden)):
                 sec_last_input = hidden[-2]
             else:
                 sec_last_input = hidden[n_generated - 2]
-            sec_last_token_embedding = torch.stack([layer[:, -1, :] for layer in sec_last_input]).cpu()
-    
+            sec_last_token_embedding = torch.stack(
+                [layer[:, -1, :] for layer in sec_last_input]).cpu()
+
             # Get the last input token embeddings (before generated tokens)
             last_tok_bef_gen_input = hidden[0]
-            last_tok_bef_gen_embedding = torch.stack([layer[:, -1, :] for layer in last_tok_bef_gen_input]).cpu()
+            last_tok_bef_gen_embedding = torch.stack(
+                [layer[:, -1, :] for layer in last_tok_bef_gen_input]).cpu()
 
         # Get log_likelihoods.
         transition_scores = self.model.compute_transition_scores(
             outputs.sequences, outputs.scores, normalize_logits=True)
         log_likelihoods = [score.item() for score in transition_scores[0]]
         if len(log_likelihoods) == 1:
-            logging.warning('Taking first and only generation for log likelihood!')
+            logging.warning(
+                'Taking first and only generation for log likelihood!')
             log_likelihoods = log_likelihoods
         else:
             log_likelihoods = log_likelihoods[:n_generated]
@@ -373,7 +381,8 @@ class HuggingfaceModel(BaseModel):
         hidden_states = (last_token_embedding,)
 
         if return_latent:
-            hidden_states += (sec_last_token_embedding, last_tok_bef_gen_embedding)
+            hidden_states += (sec_last_token_embedding,
+                              last_tok_bef_gen_embedding)
         else:
             hidden_states += (None, None)
 
@@ -385,14 +394,16 @@ class HuggingfaceModel(BaseModel):
         """Get the probability of the model anwering A (True) for the given input"""
 
         input_data += ' A'
-        tokenized_prompt_true = self.tokenizer(input_data, return_tensors='pt').to('cuda')['input_ids']
+        tokenized_prompt_true = self.tokenizer(
+            input_data, return_tensors='pt').to('cuda')['input_ids']
 
         target_ids_true = tokenized_prompt_true.clone()
         # Set all target_ids except the last one to -100.
         target_ids_true[0, :-1] = -100
 
         with torch.no_grad():
-            model_output_true = self.model(tokenized_prompt_true, labels=target_ids_true)
+            model_output_true = self.model(
+                tokenized_prompt_true, labels=target_ids_true)
 
         loss_true = model_output_true.loss
 
@@ -401,12 +412,13 @@ class HuggingfaceModel(BaseModel):
     def get_perplexity(self, input_data):
         """Get the probability of the model anwering A (True) for the given input"""
 
-        tokenized_data = self.tokenizer(input_data, return_tensors='pt').to('cuda')['input_ids']
+        tokenized_data = self.tokenizer(
+            input_data, return_tensors='pt').to('cuda')['input_ids']
 
         with torch.no_grad():
-            model_output_true = self.model(tokenized_data, labels=tokenized_data)
+            model_output_true = self.model(
+                tokenized_data, labels=tokenized_data)
 
         perplexity = - model_output_true.loss.item()
-
 
         return perplexity

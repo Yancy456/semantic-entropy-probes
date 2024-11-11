@@ -13,7 +13,7 @@ import torch.nn.functional as F
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from uncertainty.models.huggingface_models import HuggingfaceModel
-from uncertainty.utils import openai as oai
+# from uncertainty.utils import openai as oai
 from uncertainty.utils import utils
 
 
@@ -32,7 +32,8 @@ class BaseEntailment:
 
 class EntailmentDeberta(BaseEntailment):
     def __init__(self):
-        self.tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v2-xlarge-mnli")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            "microsoft/deberta-v2-xlarge-mnli")
         self.model = AutoModelForSequenceClassification.from_pretrained(
             "microsoft/deberta-v2-xlarge-mnli").to(DEVICE)
 
@@ -44,7 +45,8 @@ class EntailmentDeberta(BaseEntailment):
         outputs = self.model(**inputs)
         logits = outputs.logits
         # Deberta-mnli returns `neutral` and `entailment` classes at indices 1 and 2.
-        largest_index = torch.argmax(F.softmax(logits, dim=1))  # pylint: disable=no-member
+        largest_index = torch.argmax(
+            F.softmax(logits, dim=1))  # pylint: disable=no-member
         prediction = largest_index.cpu().item()
         if os.environ.get('DEBERTA_FULL_LOG', False):
             logging.info('Deberta Input: %s -> %s', text1, text2)
@@ -178,16 +180,19 @@ def get_semantic_ids(strings_list, model, strict_entailment=False, example=None)
     def are_equivalent(text1, text2):
 
         implication_1 = model.check_implication(text1, text2, example=example)
-        implication_2 = model.check_implication(text2, text1, example=example)  # pylint: disable=arguments-out-of-order
+        implication_2 = model.check_implication(
+            text2, text1, example=example)  # pylint: disable=arguments-out-of-order
         assert (implication_1 in [0, 1, 2]) and (implication_2 in [0, 1, 2])
 
         if strict_entailment:
-            semantically_equivalent = (implication_1 == 2) and (implication_2 == 2)
+            semantically_equivalent = (
+                implication_1 == 2) and (implication_2 == 2)
 
         else:
             implications = [implication_1, implication_2]
             # Check if none of the implications are 0 (contradiction) and not both of them are neutral.
-            semantically_equivalent = (0 not in implications) and ([1, 1] != implications)
+            semantically_equivalent = (0 not in implications) and ([
+                1, 1] != implications)
 
         return semantically_equivalent
 
@@ -226,7 +231,8 @@ def logsumexp_by_id(semantic_ids, log_likelihoods, agg='sum'):
         if agg == 'sum':
             logsumexp_value = np.log(np.sum(np.exp(id_log_likelihoods))) - 5.0
         elif agg == 'sum_normalized':
-            log_lik_norm = id_log_likelihoods - np.log(np.sum(np.exp(log_likelihoods)))
+            log_lik_norm = id_log_likelihoods - \
+                np.log(np.sum(np.exp(log_likelihoods)))
             logsumexp_value = np.log(np.sum(np.exp(log_lik_norm)))
         elif agg == 'mean':
             logsumexp_value = np.log(np.mean(np.exp(id_log_likelihoods)))

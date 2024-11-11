@@ -16,8 +16,8 @@ from uncertainty.uncertainty_measures import p_true as p_true_utils
 from compute_uncertainty_measures import main as main_compute
 
 
-utils.setup_logger()
-openai.api_key = os.getenv("OPENAI_API_KEY")  # Set up OpenAI API credentials.
+# utils.setup_logger()
+# openai.api_key = os.getenv("OPENAI_API_KEY")  # Set up OpenAI API credentials.
 
 
 def main(args):
@@ -29,24 +29,24 @@ def main(args):
         if not args.answerable_only:
             logging.info('Forcing `answerable_only=True` for squad dataset.')
             args.answerable_only = True
-    
+
     experiment_details = {'args': args}
     random.seed(args.random_seed)
 
     # Implement
-    user = os.environ['USER']
-    entity = os.environ['WANDB_ENT']
-    slurm_jobid = os.getenv('SLURM_JOB_ID', None)
-    scratch_dir = os.getenv('SCRATCH_DIR', '.')
-    if not os.path.exists(f"{scratch_dir}/{user}/uncertainty"):
-        os.makedirs(f"{scratch_dir}/{user}/uncertainty")
+    # user = os.environ['USER']
+    # entity = os.environ['WANDB_ENT']
+    # slurm_jobid = os.getenv('SLURM_JOB_ID', None)
+    # scratch_dir = os.getenv('SCRATCH_DIR', '.')
+    # if not os.path.exists(f"{scratch_dir}/{user}/uncertainty"):
+    #    os.makedirs(f"{scratch_dir}/{user}/uncertainty")
 
     wandb.init(
-        entity=entity,
+        # entity=entity,
         project="semantic_uncertainty" if not args.debug else "semantic_uncertainty_debug",
-        dir=f"{scratch_dir}/{user}/uncertainty",
+        # dir=f"{scratch_dir}/{user}/uncertainty",
         config=args,
-        notes=f'slurm_id: {slurm_jobid}, experiment_lot: {args.experiment_lot}',
+        # notes=f'slurm_id: {slurm_jobid}, experiment_lot: {args.experiment_lot}',
     )
     logging.info('Finished wandb init.')
 
@@ -59,16 +59,19 @@ def main(args):
             'Using OOD dataset %s to construct few-shot prompts and train p_ik.',
             args.ood_train_dataset)
         # Get indices of answerable and unanswerable questions and construct prompt.
-        train_dataset, _ = load_ds(args.ood_train_dataset, add_options=args.use_mc_options)
+        train_dataset, _ = load_ds(
+            args.ood_train_dataset, add_options=args.use_mc_options)
     if not isinstance(train_dataset, list):
         logging.info('Train dataset: %s', train_dataset)
 
     # Get indices of answerable and unanswerable questions and construct prompt.
-    answerable_indices, unanswerable_indices = utils.split_dataset(train_dataset)
+    answerable_indices, unanswerable_indices = utils.split_dataset(
+        train_dataset)
 
     if args.answerable_only:
         unanswerable_indices = []
-        val_answerable, val_unanswerable = utils.split_dataset(validation_dataset)
+        val_answerable, val_unanswerable = utils.split_dataset(
+            validation_dataset)
         del val_unanswerable
         validation_dataset = [validation_dataset[i] for i in val_answerable]
 
@@ -94,8 +97,10 @@ def main(args):
         logging.info(80*'#')
         logging.info('Constructing few-shot prompt for p_true.')
 
-        p_true_indices = random.sample(answerable_indices, args.p_true_num_fewshot)
-        remaining_answerable = list(set(remaining_answerable) - set(p_true_indices))
+        p_true_indices = random.sample(
+            answerable_indices, args.p_true_num_fewshot)
+        remaining_answerable = list(
+            set(remaining_answerable) - set(p_true_indices))
         p_true_few_shot_prompt, p_true_responses, len_p_true = p_true_utils.construct_few_shot_prompt(
             model=model, dataset=train_dataset, indices=p_true_indices,
             prompt=prompt, brief=BRIEF,
@@ -130,18 +135,21 @@ def main(args):
                 logging.info('Skip training data.')
                 continue
             dataset = train_dataset
-            possible_indices = list(set(remaining_answerable) | set(unanswerable_indices))
+            possible_indices = list(
+                set(remaining_answerable) | set(unanswerable_indices))
 
         else:
             dataset = validation_dataset
             possible_indices = range(0, len(dataset))
 
         # Evaluate over random subset of the datasets.
-        indices = random.sample(possible_indices, min(args.num_samples, len(dataset)))
+        indices = random.sample(possible_indices, min(
+            args.num_samples, len(dataset)))
         experiment_details[dataset_split] = {'indices': indices}
 
         if args.num_samples > len(dataset):
-            logging.warning('Not enough samples in dataset. Using all %d samples.', len(dataset))
+            logging.warning(
+                'Not enough samples in dataset. Using all %d samples.', len(dataset))
 
         it = 0
         for index in tqdm(indices):
@@ -153,7 +161,8 @@ def main(args):
             # Grab example at index.
             example = dataset[index]
             question, context = example["question"], example['context']
-            generations[example['id']] = {'question': question, 'context': context}
+            generations[example['id']] = {
+                'question': question, 'context': context}
             correct_answer = example['answers']['text']
 
             current_input = make_prompt(
@@ -178,13 +187,15 @@ def main(args):
                 # Temperature for first generation is always `0.1`.
                 temperature = 0.1 if i == 0 else args.temperature
 
-                predicted_answer, token_log_likelihoods, (embedding, emb_last_before_gen, emb_before_eos) = model.predict(local_prompt, temperature, return_latent=True) 
-                
+                predicted_answer, token_log_likelihoods, (embedding, emb_last_before_gen, emb_before_eos) = model.predict(
+                    local_prompt, temperature, return_latent=True)
+
                 # Last token embedding
                 embedding = embedding.cpu() if embedding is not None else None
-                emb_last_before_gen = emb_last_before_gen.cpu() if emb_last_before_gen is not None else None
+                emb_last_before_gen = emb_last_before_gen.cpu(
+                ) if emb_last_before_gen is not None else None
                 emb_before_eos = emb_before_eos.cpu() if emb_before_eos is not None else None
-                
+
                 compute_acc = args.compute_accuracy_at_all_temps or (i == 0)
                 if correct_answer and compute_acc:
                     acc = metric(predicted_answer, example, model)
@@ -197,8 +208,10 @@ def main(args):
                     if args.use_context:
                         logging.info('context: '.ljust(15) + str(context))
                     logging.info('question: '.ljust(15) + question)
-                    logging.info('low-t prediction: '.ljust(15) + predicted_answer)
-                    logging.info('correct answer: '.ljust(15) + str(correct_answer))
+                    logging.info(
+                        'low-t prediction: '.ljust(15) + predicted_answer)
+                    logging.info('correct answer: '.ljust(
+                        15) + str(correct_answer))
                     logging.info('accuracy: '.ljust(15) + str(acc))
 
                     accuracies.append(acc)
@@ -208,7 +221,7 @@ def main(args):
                         'embedding': embedding,
                         'accuracy': acc,
                         'emb_last_tok_before_gen': emb_last_before_gen,
-                        'emb_tok_before_eos': emb_before_eos, 
+                        'emb_tok_before_eos': emb_before_eos,
                     }
 
                     generations[example['id']].update({
@@ -216,7 +229,8 @@ def main(args):
                         'reference': utils.get_reference(example),
                     })
                 else:
-                    logging.info('high-t prediction '.ljust(15) + str(i) + ' : ' + predicted_answer)
+                    logging.info('high-t prediction '.ljust(15) +
+                                 str(i) + ' : ' + predicted_answer)
                     # Aggregate predictions over num_generations.
                     full_responses.append(
                         (predicted_answer, token_log_likelihoods, embedding, acc))
@@ -255,7 +269,6 @@ def main(args):
 
 
 if __name__ == '__main__':
-
     parser = utils.get_parser()
     args, unknown = parser.parse_known_args()
     logging.info('Starting new run with args: %s', args)

@@ -9,7 +9,7 @@ import wandb
 from evaluate import load
 
 from uncertainty.models.huggingface_models import HuggingfaceModel
-from uncertainty.utils import openai as oai
+# from uncertainty.utils import openai as oai
 
 BRIEF_PROMPTS = {
     'default': "Answer the following question as briefly as possible.\n",
@@ -133,13 +133,15 @@ def get_parser(stages=['generate', 'compute']):
                             default=True, action=argparse.BooleanOptionalAction)
         parser.add_argument('--strict_entailment',
                             default=True, action=argparse.BooleanOptionalAction)
-        parser.add_argument('--use_all_generations', default=True, action=argparse.BooleanOptionalAction)
+        parser.add_argument('--use_all_generations', default=True,
+                            action=argparse.BooleanOptionalAction)
         parser.add_argument('--use_num_generations', type=int, default=-1)
         parser.add_argument("--entailment_model", default='deberta', type=str)
         parser.add_argument(
             "--entailment_cache_id", default=None, type=str,
             help='Restore entailment predictions from previous run for GPT-4/LLaMa-Entailment.')
-        parser.add_argument('--entailment_cache_only', default=False, action=argparse.BooleanOptionalAction)
+        parser.add_argument('--entailment_cache_only',
+                            default=False, action=argparse.BooleanOptionalAction)
         parser.add_argument('--compute_p_true_in_compute_stage',
                             default=False, action=argparse.BooleanOptionalAction)
         parser.add_argument('--reuse_entailment_model',
@@ -171,7 +173,8 @@ def construct_fewshot_prompt_from_indices(dataset, example_indices, brief, brief
         question = example["question"]
         answer = example["answers"]["text"][0]
 
-        prompt = prompt + make_prompt(context, question, answer, brief, brief_always)
+        prompt = prompt + \
+            make_prompt(context, question, answer, brief, brief_always)
 
     return prompt
 
@@ -268,7 +271,8 @@ def get_reference(example):
         example = example['reference']
     answers = example['answers']
     answer_starts = answers.get('answer_start', [])
-    reference = {'answers': {'answer_start': answer_starts, 'text': answers['text']}, 'id': example['id']}
+    reference = {'answers': {'answer_start': answer_starts,
+                             'text': answers['text']}, 'id': example['id']}
     return reference
 
 
@@ -317,7 +321,8 @@ def get_metric(metric):
             else:
                 raise ValueError
 
-            prediction = {'prediction_text': response, 'no_answer_probability': 0.0, 'id': exid}
+            prediction = {'prediction_text': response,
+                          'no_answer_probability': 0.0, 'id': exid}
             results = squad_metric.compute(
                 predictions=[prediction],
                 references=[get_reference(example)])

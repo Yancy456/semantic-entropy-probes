@@ -1,0 +1,192 @@
+wandb_version: 1
+
+debug:
+  desc: null
+  value: false
+entity:
+  desc: null
+  value: null
+random_seed:
+  desc: null
+  value: 10
+metric:
+  desc: null
+  value: squad
+compute_accuracy_at_all_temps:
+  desc: null
+  value: true
+experiment_lot:
+  desc: null
+  value: Unnamed Experiment
+model_name:
+  desc: null
+  value: /root/autodl-tmp/llama2-7b-chat
+model_max_new_tokens:
+  desc: null
+  value: 50
+dataset:
+  desc: null
+  value: trivia_qa
+ood_train_dataset:
+  desc: null
+  value: null
+num_samples:
+  desc: null
+  value: 400
+num_few_shot:
+  desc: null
+  value: 5
+p_true_num_fewshot:
+  desc: null
+  value: 12
+p_true_hint:
+  desc: null
+  value: false
+num_generations:
+  desc: null
+  value: 10
+temperature:
+  desc: null
+  value: 1.0
+use_mc_options:
+  desc: null
+  value: true
+get_training_set_generations:
+  desc: null
+  value: true
+use_context:
+  desc: null
+  value: false
+get_training_set_generations_most_likely_only:
+  desc: null
+  value: true
+compute_p_true:
+  desc: null
+  value: true
+brief_always:
+  desc: null
+  value: false
+enable_brief:
+  desc: null
+  value: true
+brief_prompt:
+  desc: null
+  value: default
+prompt_type:
+  desc: null
+  value: default
+compute_uncertainties:
+  desc: null
+  value: true
+answerable_only:
+  desc: null
+  value: false
+recompute_accuracy:
+  desc: null
+  value: false
+eval_wandb_runid:
+  desc: null
+  value: null
+train_wandb_runid:
+  desc: null
+  value: null
+num_eval_samples:
+  desc: null
+  value: 10000000000000000000
+compute_predictive_entropy:
+  desc: null
+  value: true
+compute_p_ik:
+  desc: null
+  value: true
+compute_p_ik_answerable:
+  desc: null
+  value: false
+compute_context_entails_response:
+  desc: null
+  value: false
+analyze_run:
+  desc: null
+  value: true
+assign_new_wandb_id:
+  desc: null
+  value: false
+restore_entity_eval:
+  desc: null
+  value: null
+restore_entity_train:
+  desc: null
+  value: null
+condition_on_question:
+  desc: null
+  value: true
+strict_entailment:
+  desc: null
+  value: true
+use_all_generations:
+  desc: null
+  value: true
+use_num_generations:
+  desc: null
+  value: -1
+entailment_model:
+  desc: null
+  value: deberta
+entailment_cache_id:
+  desc: null
+  value: null
+entailment_cache_only:
+  desc: null
+  value: false
+compute_p_true_in_compute_stage:
+  desc: null
+  value: false
+reuse_entailment_model:
+  desc: null
+  value: false
+_wandb:
+  desc: null
+  value:
+    python_version: 3.11.5
+    cli_version: 0.16.0
+    framework: huggingface
+    huggingface_version: 4.35.2
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1731240077.985092
+    t:
+      1:
+      - 1
+      - 5
+      - 11
+      - 49
+      - 51
+      - 53
+      - 55
+      - 71
+      - 95
+      - 100
+      2:
+      - 1
+      - 5
+      - 11
+      - 49
+      - 51
+      - 53
+      - 55
+      - 71
+      - 95
+      - 100
+      3:
+      - 3
+      - 16
+      - 23
+      4: 3.11.5
+      5: 0.16.0
+      6: 4.35.2
+      8:
+      - 5
+      13: linux-x86_64
+is_ood_eval:
+  desc: null
+  value: false
