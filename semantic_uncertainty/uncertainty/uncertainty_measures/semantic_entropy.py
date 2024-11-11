@@ -56,7 +56,6 @@ class EntailmentDeberta(BaseEntailment):
 
 
 class EntailmentLLM(BaseEntailment):
-
     entailment_file = 'entailment_cache.pkl'
 
     def __init__(self, entailment_cache_id, entailment_cache_only):

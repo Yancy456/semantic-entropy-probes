@@ -52,6 +52,8 @@ def main(args):
 
     metric = utils.get_metric(args.metric)
 
+
+    # load dataset
     train_dataset, validation_dataset = load_ds(
         args.dataset, add_options=args.use_mc_options, seed=args.random_seed)
     if args.ood_train_dataset is not None:
@@ -79,6 +81,7 @@ def main(args):
     experiment_details['prompt_indices'] = prompt_indices
     remaining_answerable = list(set(answerable_indices) - set(prompt_indices))
 
+
     # Create Few-Shot prompt.
     make_prompt = utils.get_make_prompt(args)
     BRIEF = utils.BRIEF_PROMPTS[args.brief_prompt]
@@ -89,8 +92,10 @@ def main(args):
     experiment_details['BRIEF'] = BRIEF
     logging.info('Prompt is: %s', prompt)
 
+
     # Initialize model.
     model = utils.init_model(args)
+
 
     # Initialize prompt for p_true baseline.
     if args.compute_p_true:
@@ -118,6 +123,8 @@ def main(args):
         logging.info('p_true_few_shot_prompt: %s', p_true_few_shot_prompt)
         logging.info(80*'#')
 
+
+
     # Start answer generation.
     logging.info(80 * '=')
     logging.info('Generating answers: ')
@@ -137,7 +144,6 @@ def main(args):
             dataset = train_dataset
             possible_indices = list(
                 set(remaining_answerable) | set(unanswerable_indices))
-
         else:
             dataset = validation_dataset
             possible_indices = range(0, len(dataset))
