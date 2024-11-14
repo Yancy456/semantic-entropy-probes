@@ -19,27 +19,9 @@ from compute_uncertainty_measures import main as main_compute
 # utils.setup_logger()
 # openai.api_key = os.getenv("OPENAI_API_KEY")  # Set up OpenAI API credentials.
 
-
 def main(args):
-    if args.dataset == 'svamp':
-        if not args.use_context:
-            logging.info('Forcing `use_context=True` for svamp dataset.')
-            args.use_context = True
-    elif args.dataset == 'squad':
-        if not args.answerable_only:
-            logging.info('Forcing `answerable_only=True` for squad dataset.')
-            args.answerable_only = True
-
-    experiment_details = {'args': args}
     random.seed(args.random_seed)
 
-    # Implement
-    # user = os.environ['USER']
-    # entity = os.environ['WANDB_ENT']
-    # slurm_jobid = os.getenv('SLURM_JOB_ID', None)
-    # scratch_dir = os.getenv('SCRATCH_DIR', '.')
-    # if not os.path.exists(f"{scratch_dir}/{user}/uncertainty"):
-    #    os.makedirs(f"{scratch_dir}/{user}/uncertainty")
     wandb.init(
         # entity=entity,
         project="semantic_uncertainty" if not args.debug else "semantic_uncertainty_debug",
@@ -47,23 +29,15 @@ def main(args):
         config=args,
         # notes=f'slurm_id: {slurm_jobid}, experiment_lot: {args.experiment_lot}',
     )
-    logging.info('Finished wandb init.')
 
     metric = utils.get_metric(args.metric)
 
 
-    # load dataset
+
+################### Load Dataset ################################################
+
     train_dataset, validation_dataset = load_ds(
         args.dataset, add_options=args.use_mc_options, seed=args.random_seed)
-    if args.ood_train_dataset is not None:
-        logging.warning(
-            'Using OOD dataset %s to construct few-shot prompts and train p_ik.',
-            args.ood_train_dataset)
-        # Get indices of answerable and unanswerable questions and construct prompt.
-        train_dataset, _ = load_ds(
-            args.ood_train_dataset, add_options=args.use_mc_options)
-    if not isinstance(train_dataset, list):
-        logging.info('Train dataset: %s', train_dataset)
 
     # Get indices of answerable and unanswerable questions and construct prompt.
     answerable_indices, unanswerable_indices = utils.split_dataset(
@@ -77,51 +51,26 @@ def main(args):
         validation_dataset = [validation_dataset[i] for i in val_answerable]
 
     prompt_indices = random.sample(answerable_indices, args.num_few_shot)
-    experiment_details['prompt_indices'] = prompt_indices
     remaining_answerable = list(set(answerable_indices) - set(prompt_indices))
 
+###################################################################################
 
-    # Create Few-Shot prompt.
+
+################### Create Few-Shot prompt ################################################
     make_prompt = utils.get_make_prompt(args)
     BRIEF = utils.BRIEF_PROMPTS[args.brief_prompt]
     arg = args.brief_always if args.enable_brief else True
     prompt = utils.construct_fewshot_prompt_from_indices(
         train_dataset, prompt_indices, BRIEF, arg, make_prompt)
-    experiment_details['prompt'] = prompt
-    experiment_details['BRIEF'] = BRIEF
     logging.info('Prompt is: %s', prompt)
 
+####################################################################################
 
-    # Initialize model.
+
+################### Initialize model ################################################
     model = utils.init_model(args)
 
-
-    # Initialize prompt for p_true baseline.
-    if args.compute_p_true:
-        logging.info(80*'#')
-        logging.info('Constructing few-shot prompt for p_true.')
-
-        p_true_indices = random.sample(
-            answerable_indices, args.p_true_num_fewshot)
-        remaining_answerable = list(
-            set(remaining_answerable) - set(p_true_indices))
-        p_true_few_shot_prompt, p_true_responses, len_p_true = p_true_utils.construct_few_shot_prompt(
-            model=model, dataset=train_dataset, indices=p_true_indices,
-            prompt=prompt, brief=BRIEF,
-            brief_always=args.brief_always and args.enable_brief,
-            make_prompt=make_prompt, num_generations=args.num_generations,
-            metric=metric)
-        wandb.config.update(
-            {'p_true_num_fewshot': len_p_true}, allow_val_change=True)
-        wandb.log(dict(len_p_true=len_p_true))
-        experiment_details['p_true_indices'] = p_true_indices
-        experiment_details['p_true_responses'] = p_true_responses
-        experiment_details['p_true_few_shot_prompt'] = p_true_few_shot_prompt
-        logging.info('Finished constructing few-shot prompt for p_true.')
-        logging.info(80*'#')
-        logging.info('p_true_few_shot_prompt: %s', p_true_few_shot_prompt)
-        logging.info(80*'#')
-
+####################################################################################
 
 
     # Start answer generation.
@@ -150,7 +99,6 @@ def main(args):
         # Evaluate over random subset of the datasets.
         indices = random.sample(possible_indices, min(
             args.num_samples, len(dataset)))
-        experiment_details[dataset_split] = {'indices': indices}
 
         if args.num_samples > len(dataset):
             logging.warning(
@@ -200,30 +148,11 @@ def main(args):
                 ) if emb_last_before_gen is not None else None
                 emb_before_eos = emb_before_eos.cpu() if emb_before_eos is not None else None
 
-                compute_acc = args.compute_accuracy_at_all_temps or (i == 0)
-                if correct_answer and compute_acc:
-                    acc = metric(predicted_answer, example, model)
-                else:
-                    acc = 0.0  # pylint: disable=invalid-name
-
                 if i == 0:
-                    # Logging.
-                    logging.info('Iteration ' + str(it) + ':  ' + 80*'#')
-                    if args.use_context:
-                        logging.info('context: '.ljust(15) + str(context))
-                    logging.info('question: '.ljust(15) + question)
-                    logging.info(
-                        'low-t prediction: '.ljust(15) + predicted_answer)
-                    logging.info('correct answer: '.ljust(
-                        15) + str(correct_answer))
-                    logging.info('accuracy: '.ljust(15) + str(acc))
-
-                    accuracies.append(acc)
                     most_likely_answer_dict = {
                         'response': predicted_answer,
                         'token_log_likelihoods': token_log_likelihoods,
                         'embedding': embedding,
-                        'accuracy': acc,
                         'emb_last_tok_before_gen': emb_last_before_gen,
                         'emb_tok_before_eos': emb_before_eos,
                     }
@@ -237,37 +166,17 @@ def main(args):
                                  str(i) + ' : ' + predicted_answer)
                     # Aggregate predictions over num_generations.
                     full_responses.append(
-                        (predicted_answer, token_log_likelihoods, embedding, acc))
+                        (predicted_answer, token_log_likelihoods, embedding))
 
             # Append all predictions for this example to `generations`.
             generations[example['id']]['responses'] = full_responses
 
-            if args.compute_p_true and dataset_split == 'validation':
-                # Already compute p_true here. Avoid cost of generations in compute_uncertainty script.
-                p_true = p_true_utils.calculate_p_true(
-                    model, question, most_likely_answer_dict['response'],
-                    [r[0] for r in full_responses], p_true_few_shot_prompt,
-                    hint=args.p_true_hint)
-                p_trues.append(p_true)
-                logging.info('p_true: %s', p_true)
-
         # Save generations for that split.
         utils.save(generations, f'{dataset_split}_generations.pkl')
 
-        # Log overall accuracy.
-        accuracy = np.mean(accuracies)
-        print(f"Overall {dataset_split} split accuracy: {accuracy}")
-        wandb.log({f"{dataset_split}_accuracy": accuracy})
-
         if dataset_split == 'validation':
-            if args.compute_p_true:
-                results_dict['uncertainty_measures'] = {
-                    'p_false':  [1 - p for p in p_trues],
-                    'p_false_fixed':  [1 - np.exp(p) for p in p_trues],
-                }
             utils.save(results_dict, 'uncertainty_measures.pkl')
 
-    utils.save(experiment_details, 'experiment_details.pkl')
     logging.info('Run complete.')
     del model
 

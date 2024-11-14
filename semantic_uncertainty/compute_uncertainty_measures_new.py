@@ -39,8 +39,6 @@ def main(args):
     wandb_dir = f'{scratch_dir}/{user}/uncertainty'
     slurm_jobid = os.getenv('SLURM_JOB_ID', None)
     project = "semantic_uncertainty" if not args.debug else "semantic_uncertainty_debug"
-
-
     if args.assign_new_wandb_id:
         logging.info('Assign new wandb_id.')
         api = wandb.Api()
@@ -61,10 +59,35 @@ def main(args):
                 name = f'{wandb.run.dir}/{filename}'
 
             return Restored
+    else:
+        logging.info('Reuse active wandb id.')
 
+        def restore(filename):
+            class Restored:
+                name = f'{wandb.run.dir}/{filename}'
+            return Restored
 
+    if args.train_wandb_runid != args.eval_wandb_runid:
+        logging.info(
+            "Distribution shift for p_ik. Training on embeddings from run %s but evaluating on run %s",
+            args.train_wandb_runid, args.eval_wandb_runid)
 
-    is_ood_eval = False  # pylint: disable=invalid-name
+        is_ood_eval = True  # pylint: disable=invalid-name
+        api = wandb.Api()
+        old_run_train = api.run(f'{args.restore_entity_train}/semantic_uncertainty/{args.train_wandb_runid}')
+        filename = 'train_generations.pkl'
+        old_run_train.file(filename).download(
+            replace=True, exist_ok=False, root=wandb.run.dir)
+        with open(f'{wandb.run.dir}/{filename}', "rb") as infile:
+            train_generations = pickle.load(infile)
+        wandb.config.update(
+            {"ood_training_set": old_run_train.config['dataset']}, allow_val_change=True)
+    else:
+        is_ood_eval = False  # pylint: disable=invalid-name
+        if args.compute_p_ik or args.compute_p_ik_answerable:
+            train_generations_pickle = restore('train_generations.pkl')
+            with open(train_generations_pickle.name, 'rb') as infile:
+                train_generations = pickle.load(infile)
 
     wandb.config.update({"is_ood_eval": is_ood_eval}, allow_val_change=True)
 
@@ -82,6 +105,10 @@ def main(args):
             raise ValueError
         logging.info('Entailment model loading complete.')
 
+    
+    if args.recompute_accuracy:
+        logging.warning('Recompute accuracy enabled. This does not apply to precomputed p_true!')
+        metric = utils.get_metric(args.metric)
 
     result_dict_pickle = restore('uncertainty_measures.pkl')
     with open(result_dict_pickle.name, "rb") as infile:
@@ -117,8 +144,17 @@ def main(args):
         else:
             responses = [fr[0] for fr in full_responses]
 
+        if args.recompute_accuracy:
+            logging.info('Recomputing accuracy!')
+            if is_answerable(example):
+                acc = metric(most_likely_answer['response'], example, None)
+            else:
+                acc = 0.0  # pylint: disable=invalid-name
+            validation_is_true.append(acc)
+            logging.info('Recomputed accuracy!')
 
-        validation_is_true.append(most_likely_answer['accuracy'])
+        else:
+            validation_is_true.append(most_likely_answer['accuracy'])
 
         validation_answerable.append(is_answerable(example))
         validation_embeddings.append(most_likely_answer['embedding'])
@@ -207,6 +243,13 @@ def main(args):
             logging.info('High Temp Generation:')
             logging.info(log_str, semantic_ids, log_liks_agg, entropies_fmt)
 
+        if args.compute_p_true_in_compute_stage:
+            p_true = p_true_utils.calculate_p_true(
+                pt_model, question, most_likely_answer['response'],
+                responses, p_true_few_shot_prompt,
+                hint=old_exp['args'].p_true_hint)
+            p_trues.append(p_true)
+            logging.info('p_true: %s', np.exp(p_true))
 
         count += 1
         if count >= args.num_eval_samples:

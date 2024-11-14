@@ -20,7 +20,6 @@ result_dict = {}
 
 UNC_MEAS = 'uncertainty_measures.pkl'
 
-
 def init_wandb(wandb_runid, assign_new_wandb_id, experiment_lot, entity):
     '''Initialize wandb session.'''
     user = os.environ['USER']
